@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import LinesTable from '../components/LinesTable'
-import { computeLines, fmtGrams, fmtMinutes, fmtMoney, scaledYield, summarize } from '../lib/calc'
+import ManufactureModal from '../components/ManufactureModal'
+import { computeLines, fmtGrams, fmtMinutes, fmtMoney, scaledYield, snapshotLines, summarize } from '../lib/calc'
 import { useAppData } from '../lib/context'
 import { deleteTest, saveTest, updateRecipeItems, useDbValue } from '../lib/data'
 import type { Recipe, TestRun } from '../lib/types'
@@ -10,6 +11,7 @@ export default function RecipeView({ id }: { id: string }) {
   const { recipes, ingredients, currency } = useAppData()
   const recipe = recipes[id]
   const [flourInput, setFlourInput] = useState(() => String(recipe?.baseFlour ?? 1000))
+  const [manufacturing, setManufacturing] = useState(false)
 
   if (!recipe) {
     return (
@@ -39,9 +41,16 @@ export default function RecipeView({ id }: { id: string }) {
           <h1>{recipe.name}</h1>
           {recipe.description && <p className="lede">{recipe.description}</p>}
         </div>
-        <a className="btn" href={`#/recipes/${id}/edit`}>
-          Edit recipe
-        </a>
+        <div className="row wrap">
+          <a className="btn" href={`#/recipes/${id}/edit`}>
+            Edit recipe
+          </a>
+          {recipe.items.length > 0 && (
+            <button className="btn primary" onClick={() => setManufacturing(true)}>
+              Manufacture
+            </button>
+          )}
+        </div>
       </div>
 
       {recipe.durations.length > 0 && (
@@ -108,13 +117,38 @@ export default function RecipeView({ id }: { id: string }) {
           </p>
         ) : (
           <>
-            <LinesTable lines={lines} currency={currency} showReason />
-            <Totals summary={summary} pieces={pieces} yieldLabel={yieldLabel} currency={currency} />
+            <LinesTable
+              lines={lines}
+              currency={currency}
+              showReason
+              onToggle={(i, active) =>
+                updateRecipeItems(
+                  id,
+                  recipe.items.map((it, j) => (j === i ? { ...it, active } : it)),
+                )
+              }
+            />
+            <Totals
+              summary={summary}
+              pieces={pieces}
+              yieldLabel={yieldLabel}
+              currency={currency}
+              price={recipe.pricePerPiece ?? null}
+            />
           </>
         )}
       </section>
 
       {recipe.items.length > 0 && <TestLab id={id} recipe={recipe} />}
+
+      {manufacturing && (
+        <ManufactureModal
+          recipeId={id}
+          recipe={recipe}
+          initialFlour={flour > 0 ? flour : recipe.baseFlour}
+          onClose={() => setManufacturing(false)}
+        />
+      )}
     </>
   )
 }
@@ -124,12 +158,15 @@ function Totals({
   pieces,
   yieldLabel,
   currency,
+  price,
 }: {
   summary: ReturnType<typeof summarize>
   pieces: number | null
   yieldLabel: string
   currency: string
+  price: number | null
 }) {
+  const each = pieces ? summary.totalCost / pieces : null
   return (
     <>
       <dl className="stats big">
@@ -155,7 +192,15 @@ function Totals({
             <dt>
               Makes ≈ {+pieces.toFixed(1)} {yieldLabel}
             </dt>
-            <dd>{fmtMoney(summary.totalCost / pieces, currency)} each</dd>
+            <dd>{fmtMoney(each, currency)} each</dd>
+          </div>
+        ) : null}
+        {price !== null && each !== null ? (
+          <div>
+            <dt>Sells at {fmtMoney(price, currency)}</dt>
+            <dd className={price - each < 0 ? 'text-danger' : undefined}>
+              {fmtMoney(price - each, currency)} profit each
+            </dd>
           </div>
         ) : null}
       </dl>
@@ -213,15 +258,7 @@ function TestLab({ id, recipe }: { id: string; recipe: Recipe }) {
     try {
       await saveTest(id, {
         flourWeight: flour,
-        lines: lines.map((l) => ({
-          ingredientId: l.ingredientId,
-          name: l.ingredient?.name ?? 'Missing ingredient',
-          unit: l.ingredient?.unit ?? 'g',
-          percent: l.percent,
-          grams: l.grams,
-          quantity: l.quantity,
-          cost: l.cost,
-        })),
+        lines: snapshotLines(lines),
         totalWeight: summary.totalGrams,
         totalCost: summary.totalCost,
         piecesMade: made > 0 ? made : null,

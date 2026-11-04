@@ -20,7 +20,8 @@ export interface Line {
   ingredient: Ingredient | undefined
   percent: number
   reason: string
-  /** Weight needed, in grams. */
+  active: boolean
+  /** Weight needed, in grams (0 when inactive). */
   grams: number
   /** Amount in the ingredient's own unit (pieces for `pc`), or null if it can't be worked out. */
   quantity: number | null
@@ -34,10 +35,14 @@ export function computeLines(
 ): Line[] {
   return items.map((item) => {
     const ingredient = ingredients?.[item.ingredientId]
-    const grams = (flourWeight * (item.percent || 0)) / 100
+    const active = item.active !== false
+    const grams = active ? (flourWeight * (item.percent || 0)) / 100 : 0
     let quantity: number | null = null
     let cost: number | null = null
-    if (ingredient) {
+    if (!active) {
+      quantity = 0
+      cost = 0
+    } else if (ingredient) {
       if (ingredient.unit === 'pc') {
         quantity = ingredient.gramsPerPiece ? grams / ingredient.gramsPerPiece : null
       } else {
@@ -46,7 +51,7 @@ export function computeLines(
       const perGram = costPerGram(ingredient)
       cost = perGram === null ? null : grams * perGram
     }
-    return { ...item, ingredient, grams, quantity, cost }
+    return { ...item, active, ingredient, grams, quantity, cost }
   })
 }
 
@@ -55,7 +60,7 @@ export interface Summary {
   totalCost: number
   /** True when one or more lines had no cost, so the total is incomplete. */
   costIncomplete: boolean
-  /** Sum of the flour ingredients' percentages; should be 100. */
+  /** Sum of the active flour ingredients' percentages; should be 100. */
   flourPercent: number
 }
 
@@ -65,6 +70,7 @@ export function summarize(lines: Line[]): Summary {
   let costIncomplete = false
   let flourPercent = 0
   for (const l of lines) {
+    if (!l.active) continue
     totalGrams += l.grams
     if (l.cost === null) costIncomplete = true
     else totalCost += l.cost
@@ -111,3 +117,32 @@ export function fmtMinutes(total: number) {
 }
 
 export const unitLabel: Record<Unit, string> = { g: 'grams', ml: 'millilitres', pc: 'pieces' }
+
+/** Turns computed lines into the snapshot saved with a test or batch (active ingredients only). */
+export function snapshotLines(lines: Line[]) {
+  return lines
+    .filter((l) => l.active)
+    .map((l) => ({
+      ingredientId: l.ingredientId,
+      name: l.ingredient?.name ?? 'Missing ingredient',
+      unit: l.ingredient?.unit ?? ('g' as Unit),
+      percent: l.percent,
+      grams: l.grams,
+      quantity: l.quantity,
+      cost: l.cost,
+    }))
+}
+
+export function batchSold(sales: Record<string, { qty: number }> | undefined) {
+  return Object.values(sales ?? {}).reduce((s, x) => s + (x.qty || 0), 0)
+}
+
+/** "cookies" → "cookie", "loaves" → "loaf", for labels like "price per cookie". */
+export function singular(s: string) {
+  // cookies → cookie, brownies → brownie, pies → pie; pastries → pastry
+  if (/ies$/i.test(s)) return /[kn]ies$/i.test(s) || s.length <= 4 ? s.slice(0, -1) : s.replace(/ies$/i, 'y')
+  if (/aves$/i.test(s)) return s.replace(/ves$/i, 'f')
+  if (/(ches|shes|sses|xes)$/i.test(s)) return s.replace(/es$/i, '')
+  if (/[^s]s$/i.test(s)) return s.slice(0, -1)
+  return s
+}

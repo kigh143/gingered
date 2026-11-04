@@ -7,15 +7,21 @@ Recipe costing and test bakes for one admin. React + Vite, Firebase Auth (email/
 - **Ingredients**: name, unit (g / ml / pieces), pack size, price paid for the pack, where it was bought. Cost per unit is worked out from these. Mark flours with "This is a flour". Pieces (e.g. eggs) need a weight per piece.
 - **Recipes**: name, description, cook durations (any number of stages), base flour weight, optional yield (e.g. 24 cookies). Each ingredient is a **baker's percentage**, meaning a % of the total flour weight. Flours add up to 100%. Each ingredient has a "why it's needed" note.
 - **Scale**: on a recipe, type a flour weight (or the number of pieces wanted) to get every quantity and the batch cost, cost per kg and cost per piece.
+- **Inactive ingredients**: switch an ingredient off on a recipe and it stays there, greyed out, but adds nothing to quantities, cost or flour %. Switch it back on any time.
+- **Manufacture**: on a recipe, click Manufacture. Choose the batch size by flour or by pieces wanted, check stock, enter how many were made and the price per piece, then save it as produce. Stock is reduced unless you untick that option.
+- **Production**: lists every batch with cost, price, sold and left. Record sales, edit price or notes, or delete a batch (with the option to put the stock back).
+- **Stock**: each ingredient has a stock level. "+ Stock" records a purchase and can update the pack price. Editing an ingredient corrects the count.
 - **Test lab**: change percentages and the flour amount, record how many pieces it made plus notes, and save the test. Saved tests keep the prices from that day. Load an old test back into the lab, or copy the lab's percentages into the recipe.
 
 ## Data layout (Realtime Database)
 
 ```
-ingredients/{id}   name, unit, packSize, packPrice, store, gramsPerPiece, isFlour, notes, updatedAt
-recipes/{id}       name, description, durations[{label, minutes}], items[{ingredientId, percent, reason}],
-                   baseFlour, yieldCount, yieldLabel, createdAt, updatedAt
+ingredients/{id}   name, unit, packSize, packPrice, store, gramsPerPiece, isFlour, notes, stock, updatedAt
+recipes/{id}       name, description, durations[{label, minutes}], items[{ingredientId, percent, reason, active?}],
+                   baseFlour, yieldCount, yieldLabel, pricePerPiece, createdAt, updatedAt
 tests/{recipeId}/{id}  flourWeight, lines[...snapshot], totalWeight, totalCost, piecesMade, notes, createdAt
+production/{id}    recipeId, recipeName, yieldLabel, flourWeight, expectedPieces, piecesMade, pricePerPiece,
+                   lines[...snapshot], totalCost, notes, stockDeducted, createdAt, sales/{id}{qty, at}
 settings           currency
 ```
 

@@ -15,6 +15,8 @@ export interface Ingredient {
   /** Counts toward the recipe's flour total (the 100% basis). */
   isFlour?: boolean
   notes?: string
+  /** Amount on hand, in `unit`. Goes up with purchases, down when a batch is manufactured. */
+  stock?: number | null
   updatedAt?: number
 }
 
@@ -24,6 +26,8 @@ export interface RecipeItem {
   percent: number
   /** Why this ingredient is needed in the recipe. */
   reason: string
+  /** Inactive ingredients stay on the recipe but are left out of quantities and cost. Missing = active. */
+  active?: boolean
 }
 
 export interface Duration {
@@ -41,6 +45,8 @@ export interface Recipe {
   /** How many pieces the recipe makes at `baseFlour`. */
   yieldCount?: number | null
   yieldLabel?: string
+  /** Default selling price for one piece. */
+  pricePerPiece?: number | null
   createdAt?: number
   updatedAt?: number
 }
@@ -63,6 +69,29 @@ export interface TestRun {
   totalCost: number
   piecesMade?: number | null
   notes: string
+  createdAt: number
+}
+
+export interface Sale {
+  qty: number
+  at: number
+}
+
+/** A manufactured batch, frozen with the quantities and prices used. */
+export interface Batch {
+  recipeId: string
+  recipeName: string
+  yieldLabel: string
+  flourWeight: number
+  expectedPieces: number | null
+  piecesMade: number
+  pricePerPiece: number
+  lines: TestLine[]
+  totalCost: number
+  notes: string
+  /** Whether ingredient stock was reduced when this batch was saved. */
+  stockDeducted: boolean
+  sales?: Record<string, Sale>
   createdAt: number
 }
 

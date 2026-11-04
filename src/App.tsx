@@ -5,8 +5,10 @@ import { normalizeRecipe, useAuthUser, useDbValue } from './lib/data'
 import { auth, firebaseConfigured } from './lib/firebase'
 import type { Ingredient, Recipe, Settings } from './lib/types'
 import IngredientsPage from './pages/Ingredients'
+import ProductionPage from './pages/Production'
 import Login from './pages/Login'
 import RecipeEdit from './pages/RecipeEdit'
+import RecipeImport from './pages/RecipeImport'
 import RecipesPage from './pages/Recipes'
 import RecipeView from './pages/RecipeView'
 import SettingsPage from './pages/Settings'
@@ -59,12 +61,14 @@ function Shell({ email }: { email: string }) {
   let page
   if (section === 'ingredients') page = <IngredientsPage />
   else if (section === 'settings') page = <SettingsPage />
+  else if (section === 'production') page = <ProductionPage />
   else if (section === 'recipes' && id === 'new') page = <RecipeEdit id={null} />
+  else if (section === 'recipes' && id === 'import') page = <RecipeImport />
   else if (section === 'recipes' && id && action === 'edit') page = <RecipeEdit key={id} id={id} />
   else if (section === 'recipes' && id) page = <RecipeView key={id} id={id} />
   else page = <RecipesPage />
 
-  const tab = section === 'ingredients' || section === 'settings' ? section : 'recipes'
+  const tab = section === 'ingredients' || section === 'settings' || section === 'production' ? section : 'recipes'
 
   return (
     <AppDataContext.Provider value={data}>
@@ -79,6 +83,9 @@ function Shell({ email }: { email: string }) {
           <nav className="tabs">
             <a href="#/recipes" aria-current={tab === 'recipes' ? 'page' : undefined}>
               Recipes
+            </a>
+            <a href="#/production" aria-current={tab === 'production' ? 'page' : undefined}>
+              Production
             </a>
             <a href="#/ingredients" aria-current={tab === 'ingredients' ? 'page' : undefined}>
               Ingredients

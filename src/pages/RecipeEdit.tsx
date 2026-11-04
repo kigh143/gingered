@@ -1,15 +1,17 @@
 import { useState, type FormEvent } from 'react'
-import { computeLines, fmtMinutes, fmtMoney, fmtQty, summarize } from '../lib/calc'
+import { computeLines, fmtMinutes, fmtMoney, fmtQty, singular, summarize } from '../lib/calc'
 import { navigate, useAppData } from '../lib/context'
 import { deleteRecipe, saveRecipe } from '../lib/data'
 import type { Recipe } from '../lib/types'
 import FlourBadge from '../components/FlourBadge'
+import { ActiveSwitch } from '../components/LinesTable'
 
 interface ItemRow {
   key: number
   ingredientId: string
   percent: string
   reason: string
+  active: boolean
 }
 interface DurationRow {
   key: number
@@ -29,6 +31,7 @@ export default function RecipeEdit({ id }: { id: string | null }) {
   const [baseFlour, setBaseFlour] = useState(String(initial?.baseFlour ?? 1000))
   const [yieldCount, setYieldCount] = useState(initial?.yieldCount ? String(initial.yieldCount) : '')
   const [yieldLabel, setYieldLabel] = useState(initial?.yieldLabel ?? '')
+  const [price, setPrice] = useState(initial?.pricePerPiece ? String(initial.pricePerPiece) : '')
   const [durations, setDurations] = useState<DurationRow[]>(() =>
     initial
       ? initial.durations.map((d) => ({ key: k(), label: d.label, minutes: String(d.minutes) }))
@@ -39,7 +42,13 @@ export default function RecipeEdit({ id }: { id: string | null }) {
   )
   const [items, setItems] = useState<ItemRow[]>(() =>
     initial
-      ? initial.items.map((i) => ({ key: k(), ingredientId: i.ingredientId, percent: String(i.percent), reason: i.reason }))
+      ? initial.items.map((i) => ({
+          key: k(),
+          ingredientId: i.ingredientId,
+          percent: String(i.percent),
+          reason: i.reason,
+          active: i.active !== false,
+        }))
       : [],
   )
   const [busy, setBusy] = useState(false)
@@ -65,6 +74,8 @@ export default function RecipeEdit({ id }: { id: string | null }) {
     ingredientId: i.ingredientId,
     percent: parseFloat(i.percent) || 0,
     reason: i.reason.trim(),
+    // Only store the flag when off, so existing data stays tidy.
+    ...(i.active ? {} : { active: false }),
   }))
   const lines = computeLines(parsedItems, ingredients, flour)
   const summary = summarize(lines)
@@ -81,7 +92,7 @@ export default function RecipeEdit({ id }: { id: string | null }) {
         if (r.key !== key) return r
         // A first flour defaults to 100% so the basis is right straight away.
         const isFirstFlour =
-          ingredients[ingredientId]?.isFlour && !rows.some((o) => o.key !== key && ingredients[o.ingredientId]?.isFlour)
+          ingredients[ingredientId]?.isFlour && !rows.some((o) => o.key !== key && o.active && ingredients[o.ingredientId]?.isFlour)
         return { ...r, ingredientId, percent: r.percent || (isFirstFlour ? '100' : '') }
       }),
     )
@@ -103,6 +114,7 @@ export default function RecipeEdit({ id }: { id: string | null }) {
         baseFlour: flour,
         yieldCount: yc > 0 ? yc : null,
         yieldLabel: yieldLabel.trim(),
+        pricePerPiece: parseFloat(price) >= 0 && price.trim() ? parseFloat(price) : null,
         durations: durations
           .filter((d) => d.label.trim() || d.minutes)
           .map((d) => ({ label: d.label.trim(), minutes: parseFloat(d.minutes) || 0 })),
@@ -155,7 +167,7 @@ export default function RecipeEdit({ id }: { id: string | null }) {
           <span>Description</span>
           <textarea rows={3} value={description} onChange={(e) => setDescription(e.target.value)} />
         </label>
-        <div className="grid-3">
+        <div className="grid-2">
           <label className="field">
             <span>Base flour weight (g)</span>
             <input
@@ -184,6 +196,18 @@ export default function RecipeEdit({ id }: { id: string | null }) {
           <label className="field">
             <span>Unit</span>
             <input value={yieldLabel} onChange={(e) => setYieldLabel(e.target.value)} placeholder="e.g. cookies, loaves" />
+          </label>
+          <label className="field">
+            <span>Selling price per {singular(yieldLabel.trim() || 'piece')}</span>
+            <input
+              type="number"
+              min="0"
+              step="any"
+              inputMode="decimal"
+              value={price}
+              onChange={(e) => setPrice(e.target.value)}
+              placeholder="Default for new batches"
+            />
           </label>
         </div>
       </section>
@@ -238,7 +262,7 @@ export default function RecipeEdit({ id }: { id: string | null }) {
           <FlourBadge percent={summary.flourPercent} hasItems={items.length > 0} />
         </div>
         <p className="muted small">
-          Enter each amount as a % of total flour weight. Flour adds up to 100%; 65% water means 650 g of water per
+          Enter each amount as a % of total flour weight. Use the switch to leave an ingredient out without deleting it. Flour adds up to 100%; 65% water means 650 g of water per
           1 kg of flour. Amounts on the right are at {fmtQty(flour, 'g')} of flour.
         </p>
 
@@ -252,7 +276,12 @@ export default function RecipeEdit({ id }: { id: string | null }) {
               {items.map((row, idx) => {
                 const line = lines[idx]
                 return (
-                  <div key={row.key} className="item-row">
+                  <div key={row.key} className={`item-row ${row.active ? '' : 'inactive'}`}>
+                    <ActiveSwitch
+                      active={row.active}
+                      label={ingredients[row.ingredientId]?.name ?? 'ingredient'}
+                      onChange={(active) => patchItem(row.key, { active })}
+                    />
                     <select
                       aria-label="Ingredient"
                       value={row.ingredientId}
@@ -280,8 +309,14 @@ export default function RecipeEdit({ id }: { id: string | null }) {
                       <span>%</span>
                     </div>
                     <div className="item-calc">
-                      <span>{line.ingredient ? fmtQty(line.quantity, line.ingredient.unit) : '—'}</span>
-                      <span className="muted">{fmtMoney(line.cost, currency)}</span>
+                      {row.active ? (
+                        <>
+                          <span>{line.ingredient ? fmtQty(line.quantity, line.ingredient.unit) : '—'}</span>
+                          <span className="muted">{fmtMoney(line.cost, currency)}</span>
+                        </>
+                      ) : (
+                        <span className="muted">Off</span>
+                      )}
                     </div>
                     <button
                       type="button"
@@ -305,7 +340,7 @@ export default function RecipeEdit({ id }: { id: string | null }) {
             <button
               type="button"
               className="btn small"
-              onClick={() => setItems((rows) => [...rows, { key: k(), ingredientId: '', percent: '', reason: '' }])}
+              onClick={() => setItems((rows) => [...rows, { key: k(), ingredientId: '', percent: '', reason: '', active: true }])}
             >
               + Add ingredient
             </button>

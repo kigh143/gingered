@@ -12,9 +12,14 @@ export default function RecipesPage() {
           <h1>Recipes</h1>
           <p className="muted">Every ingredient is measured as a percentage of the flour weight.</p>
         </div>
-        <a className="btn primary" href="#/recipes/new">
-          + New recipe
-        </a>
+        <div className="row">
+          <a className="btn" href="#/recipes/import">
+            Import CSV
+          </a>
+          <a className="btn primary" href="#/recipes/new">
+            + New recipe
+          </a>
+        </div>
       </div>
 
       {list.length === 0 ? (

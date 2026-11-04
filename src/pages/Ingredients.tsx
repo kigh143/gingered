@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react'
 import { costPerUnit, fmtMoney, fmtQty } from '../lib/calc'
 import { useAppData } from '../lib/context'
-import { deleteIngredient, saveIngredient } from '../lib/data'
+import { addStock, deleteIngredient, saveIngredient } from '../lib/data'
 import type { Ingredient, Unit } from '../lib/types'
 
 const unitShort: Record<Unit, string> = { g: 'g', ml: 'ml', pc: 'pc' }
@@ -9,6 +9,7 @@ const unitShort: Record<Unit, string> = { g: 'g', ml: 'ml', pc: 'pc' }
 export default function IngredientsPage() {
   const { ingredients, recipes, currency } = useAppData()
   const [editing, setEditing] = useState<{ id: string | null } | null>(null)
+  const [stocking, setStocking] = useState<string | null>(null)
   const [query, setQuery] = useState('')
 
   const list = Object.entries(ingredients)
@@ -75,6 +76,7 @@ export default function IngredientsPage() {
                 <th className="num">Pack</th>
                 <th className="num">Pack price</th>
                 <th className="num">Cost per unit</th>
+                <th className="num">In stock</th>
                 <th />
               </tr>
             </thead>
@@ -100,7 +102,19 @@ export default function IngredientsPage() {
                     {fmtMoney(costPerUnit(ing), currency, 2)}
                     <span className="muted"> / {unitShort[ing.unit]}</span>
                   </td>
+                  <td data-label="In stock" className="num">
+                    {ing.stock === undefined || ing.stock === null ? (
+                      <span className="muted">not set</span>
+                    ) : (
+                      <span className={ing.stock <= 0 ? 'text-danger strong' : undefined}>
+                        {ing.stock < 0 ? `−${fmtQty(-ing.stock, ing.unit)}` : fmtQty(ing.stock, ing.unit)}
+                      </span>
+                    )}
+                  </td>
                   <td className="actions">
+                    <button className="btn small" onClick={() => setStocking(id)}>
+                      + Stock
+                    </button>
                     <button className="btn ghost small" onClick={() => setEditing({ id })}>
                       Edit
                     </button>
@@ -113,6 +127,10 @@ export default function IngredientsPage() {
             </tbody>
           </table>
         </div>
+      )}
+
+      {stocking && ingredients[stocking] && (
+        <AddStockForm id={stocking} ingredient={ingredients[stocking]} onClose={() => setStocking(null)} />
       )}
 
       {editing && (
@@ -145,6 +163,9 @@ function IngredientForm({
   const [gramsPerPiece, setGramsPerPiece] = useState(initial?.gramsPerPiece ? String(initial.gramsPerPiece) : '')
   const [isFlour, setIsFlour] = useState(initial?.isFlour ?? false)
   const [notes, setNotes] = useState(initial?.notes ?? '')
+  const [stock, setStock] = useState(
+    initial?.stock === undefined || initial?.stock === null ? '' : String(+initial.stock.toFixed(2)),
+  )
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState('')
 
@@ -170,6 +191,7 @@ function IngredientForm({
         gramsPerPiece: unit === 'pc' ? gpp : null,
         isFlour: unit === 'pc' ? false : isFlour,
         notes: notes.trim(),
+        stock: stock.trim() === '' ? null : parseFloat(stock) || 0,
       })
       onClose()
     } catch (err) {
@@ -255,6 +277,18 @@ function IngredientForm({
           </label>
         )}
         <label className="field">
+          <span>Stock on hand ({unit})</span>
+          <input
+            type="number"
+            step="any"
+            inputMode="decimal"
+            value={stock}
+            onChange={(e) => setStock(e.target.value)}
+            placeholder="Leave blank if you don’t track stock"
+          />
+          <small className="muted">Use this to correct a count. For new purchases, use “+ Stock” instead.</small>
+        </label>
+        <label className="field">
           <span>Notes</span>
           <input value={notes} onChange={(e) => setNotes(e.target.value)} placeholder="Brand, quality, anything worth remembering" />
         </label>
@@ -265,6 +299,83 @@ function IngredientForm({
           </button>
           <button className="btn primary" disabled={busy}>
             {busy ? 'Saving…' : 'Save'}
+          </button>
+        </div>
+      </form>
+    </div>
+  )
+}
+
+function AddStockForm({ id, ingredient, onClose }: { id: string; ingredient: Ingredient; onClose: () => void }) {
+  const { currency } = useAppData()
+  const [packs, setPacks] = useState('1')
+  const [extra, setExtra] = useState('')
+  const [packPrice, setPackPrice] = useState(String(ingredient.packPrice))
+  const [store, setStore] = useState(ingredient.store)
+  const [busy, setBusy] = useState(false)
+  const [error, setError] = useState('')
+  const u = ingredient.unit
+
+  const amount = (parseFloat(packs) || 0) * ingredient.packSize + (parseFloat(extra) || 0)
+  const price = parseFloat(packPrice)
+  const priceChanged = price >= 0 && (price !== ingredient.packPrice || store.trim() !== ingredient.store)
+  const current = ingredient.stock ?? 0
+
+  async function submit(e: FormEvent) {
+    e.preventDefault()
+    if (!(amount > 0)) return setError('Enter how much you bought.')
+    if (!(price >= 0)) return setError('Enter the price paid per pack.')
+    setBusy(true)
+    try {
+      await addStock(id, amount, priceChanged ? { packPrice: price, store: store.trim() } : undefined)
+      onClose()
+    } catch (err) {
+      setError(err instanceof Error ? err.message : String(err))
+      setBusy(false)
+    }
+  }
+
+  return (
+    <div className="modal-backdrop" onMouseDown={(e) => e.target === e.currentTarget && onClose()}>
+      <form className="modal card" onSubmit={submit}>
+        <h2>Add stock: {ingredient.name}</h2>
+        <p className="muted small">
+          Now in stock: {ingredient.stock === undefined || ingredient.stock === null ? 'not set' : fmtQty(current, u)}
+        </p>
+        <div className="grid-2">
+          <label className="field">
+            <span>Packs bought ({fmtQty(ingredient.packSize, u)} each)</span>
+            <input autoFocus type="number" min="0" step="any" inputMode="decimal" value={packs} onChange={(e) => setPacks(e.target.value)} />
+          </label>
+          <label className="field">
+            <span>Plus loose amount ({u})</span>
+            <input type="number" min="0" step="any" inputMode="decimal" value={extra} onChange={(e) => setExtra(e.target.value)} placeholder="0" />
+          </label>
+          <label className="field">
+            <span>Price paid per pack</span>
+            <input type="number" min="0" step="any" inputMode="decimal" value={packPrice} onChange={(e) => setPackPrice(e.target.value)} />
+          </label>
+          <label className="field">
+            <span>Bought at</span>
+            <input value={store} onChange={(e) => setStore(e.target.value)} />
+          </label>
+        </div>
+        <div className="calc-hint">
+          Adds <strong>{fmtQty(amount, u)}</strong>, so stock becomes <strong>{fmtQty(current + amount, u)}</strong>
+          {priceChanged && (
+            <>
+              . The price changes to <strong>{fmtMoney(price, currency)}</strong> per pack for future costing. Saved
+              tests and batches keep their old prices.
+            </>
+          )}
+        </div>
+        {error && <div className="alert error">{error}</div>}
+        <div className="row end">
+          <button type="button" className="btn ghost" onClick={onClose}>
+            Cancel
+          </button>
+          <button className="btn primary" disabled={busy}>
+            {busy ? 'Saving…' : 'Add stock'}
           </button>
         </div>
       </form>

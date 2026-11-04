@@ -1,7 +1,7 @@
 {
   "rules": {
-    ".read": "auth != null && auth.token.email === 'ADMIN_EMAIL_HERE'",
-    ".write": "auth != null && auth.token.email === 'ADMIN_EMAIL_HERE'",
+    ".read": "auth != null && auth.token.email === 'ghkatende@gmail.com'",
+    ".write": "auth != null && auth.token.email === 'ghkatende@gmail.com'",
     "ingredients": {
       "$id": {
         ".validate": "newData.hasChildren(['name', 'unit', 'packSize', 'packPrice']) && newData.child('packSize').isNumber() && newData.child('packSize').val() > 0 && newData.child('packPrice').isNumber() && newData.child('unit').val().matches(/^(g|ml|pc)$/)"

@@ -1,6 +1,6 @@
 # gingered
 
-Recipe costing and test bakes for one admin. React + Vite, Firebase Auth (email/password) and Realtime Database, hosted on GitHub Pages.
+Recipe costing and test bakes for one admin. React + Vite, Firebase Auth (email/password), Realtime Database and Firebase Hosting.
 
 ## How it works
 
@@ -26,9 +26,9 @@ settings           currency
 3. **Authentication → Users → Add user**: create the admin's email and password. This is the only login.
 4. **Authentication → Settings → User actions**: turn off **Enable create (sign-up)** so nobody else can register.
 5. **Realtime Database → Create database**.
-6. **Realtime Database → Rules**: paste in `database.rules.json`, replace both `ADMIN_EMAIL_HERE` with the admin email, then **Publish**. Only that account can read or write.
+6. Put the admin email in `database.rules.json` in place of both `ADMIN_EMAIL_HERE`. These rules get deployed with the site, and only that account can read or write. Deploying stops with an error if the placeholder is still there.
 7. **Project settings → General → Your apps → Add app → Web**: copy the config values.
-8. **Authentication → Settings → Authorized domains**: add `<your-github-username>.github.io`.
+8. Put your project ID in `.firebaserc` in place of `your-firebase-project-id`.
 
 ## Run locally
 
@@ -40,11 +40,17 @@ yarn dev
 
 Node 24+ is recommended. On Node 22, `.yarnrc` skips an engine check for a Firebase module this app doesn't use.
 
-## Deploy to GitHub Pages
+## Deploy to Firebase Hosting
 
-1. Push this repo to GitHub.
-2. **Settings → Pages → Build and deployment → Source**: choose **GitHub Actions**.
-3. **Settings → Secrets and variables → Actions → Variables**: add `VITE_FIREBASE_API_KEY`, `VITE_FIREBASE_AUTH_DOMAIN`, `VITE_FIREBASE_DATABASE_URL`, `VITE_FIREBASE_PROJECT_ID` and `VITE_FIREBASE_APP_ID`.
-4. Push to `main`. `.github/workflows/deploy.yml` builds the site and publishes it to `https://<user>.github.io/<repo>/`.
+```sh
+npx firebase-tools login      # first time only
+yarn deploy                   # builds, then deploys the site and database rules
+yarn deploy:hosting           # site only
+yarn deploy:rules             # database rules only
+```
+
+The site is served at `https://<project-id>.web.app` and `https://<project-id>.firebaseapp.com`. Firebase authorises both domains for sign-in automatically. The build reads the Firebase config from `.env.local`, so fill that in before deploying.
+
+To deploy automatically on every push to GitHub, run `npx firebase-tools init hosting:github`. It creates the service account secret and the workflow for you. Add the `VITE_FIREBASE_*` values as repository variables, and pass them to the build step as `env`.
 
 The Firebase web config is not a secret. It ends up in the browser anyway. The database rules and the turned-off sign-up are what keep the data private.

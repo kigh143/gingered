@@ -115,8 +115,7 @@ function SetupNeeded() {
         <h1>Firebase isn’t configured yet</h1>
         <p>
           Copy <code>.env.example</code> to <code>.env.local</code>, fill in your Firebase web app
-          settings, and restart the dev server. For GitHub Pages, add the same values as repository
-          variables. The README has the full steps.
+          settings, and restart the dev server (or rebuild before deploying). The README has the full steps.
         </p>
       </div>
     </div>
